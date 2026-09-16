@@ -16,6 +16,7 @@ set -e
 #   OUTPUT_DIR  默认 ${SIMCLR_ROOT}/exp/simclrv2_<model>_<mode>_<input_size>
 #   CKPT_DIR    默认 /disk1/work/zychen/Checkpoints/intraoral（预训练权重目录）
 #   BATCH_SIZE  默认按模型/分辨率（r50: 224->128, 448->32; r101: 224->96, 448->24）
+#   MASTER_PORT 默认 29501（torchrun 默认 29500 常被其他任务占用，可覆盖）
 
 export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 
@@ -61,9 +62,23 @@ for GPU in $GPUS; do
     NUM_GPUS=$((NUM_GPUS + 1))
 done
 export CUDA_VISIBLE_DEVICES
+MASTER_PORT="${MASTER_PORT:-29501}"
 
-DATA_ROOT="${DATA_ROOT:-${WORKSPACE_ROOT}/.datasets/intraoral}"
-SPLIT_JSON="${SPLIT_JSON:-${DATA_ROOT}/train_test_seed0_test0p2.json}"
+# 数据根目录兼容：优先 .datasets/intraoral，找不到（挂载点缺失 / 符号链接失效）时
+# 回退到 .datasets/intraoral1。显式设置 DATA_ROOT / SPLIT_JSON 时以环境变量为准，不回退。
+resolve_dental_path() {
+    # $1 = 相对 .datasets 层名的后缀（"" 或 "/train_test_seed0_test0p2.json"）
+    for ROOT_NAME in intraoral intraoral1; do
+        if [ -e "${WORKSPACE_ROOT}/.datasets/${ROOT_NAME}$1" ]; then
+            printf '%s\n' "${WORKSPACE_ROOT}/.datasets/${ROOT_NAME}$1"
+            return 0
+        fi
+    done
+    printf '%s\n' "${WORKSPACE_ROOT}/.datasets/intraoral$1"
+}
+
+DATA_ROOT="${DATA_ROOT:-$(resolve_dental_path "")}"
+SPLIT_JSON="${SPLIT_JSON:-$(resolve_dental_path "/train_test_seed0_test0p2.json")}"
 CKPT_DIR="${CKPT_DIR:-/disk1/work/zychen/Checkpoints/intraoral}"
 if [ "${MODEL}" = "r50" ]; then
     INIT_CKPT="${INIT_CKPT:-${CKPT_DIR}/simclrv2_r50_1x_sk1.pth}"
@@ -95,9 +110,9 @@ echo "[finetune_dental] INIT_CKPT=${INIT_CKPT}"
 echo "[finetune_dental] DATA_ROOT=${DATA_ROOT}"
 echo "[finetune_dental] SPLIT_JSON=${SPLIT_JSON}"
 echo "[finetune_dental] OUTPUT_DIR=${OUTPUT_DIR}"
-echo "[finetune_dental] BATCH_SIZE=${BATCH_SIZE} (accum 1)"
+echo "[finetune_dental] BATCH_SIZE=${BATCH_SIZE} (accum 1) MASTER_PORT=${MASTER_PORT}"
 
-torchrun --nproc_per_node="${NUM_GPUS}" ft_train.py \
+torchrun --nproc_per_node="${NUM_GPUS}" --master_port="${MASTER_PORT}" ft_train.py \
     --checkpoint "${INIT_CKPT}" \
     --input_size "${INPUT_SIZE}" \
     --batch_size "${BATCH_SIZE}" \
@@ -105,7 +120,7 @@ torchrun --nproc_per_node="${NUM_GPUS}" ft_train.py \
     --epochs 100 \
     --warmup_epochs 5 \
     --save_freq 20 \
-    --eval_freq 1 \
+    --eval_freq 20 \
     --data_path "${DATA_ROOT}" \
     --split_json "${SPLIT_JSON}" \
     --split train \
