@@ -1,0 +1,16 @@
+__pycache__
+**/__pycache__
+.vscode
+.DS_Store
+
+.checkpoints
+
+.assets
+
+.datasets
+
+debug
+
+output_dir
+exp
+tmp
