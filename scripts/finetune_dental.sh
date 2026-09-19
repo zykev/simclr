@@ -10,6 +10,8 @@ set -e
 #
 # 可调环境变量:
 #   GPUS        默认 "2 3 4 5 6 7"（Swin-MAE 同款；GPU 0/1 通常被占用）
+#               分隔符空格 / 逗号 / 分号都接受，元素可带 cuda: 前缀，例如
+#               GPUS="2,3" 与 GPUS="cuda:2 cuda:3" 都等价于 GPUS="2 3"
 #   INPUT_SIZE  默认 448（与 compare/ models.yaml 的 simclrv2_*_adapted 对齐）
 #   DATA_ROOT   默认 ${WORKSPACE_ROOT}/.datasets/intraoral
 #   SPLIT_JSON  默认 ${DATA_ROOT}/train_test_seed0_test0p2.json
@@ -50,17 +52,34 @@ esac
 
 # ---- GPU / 环境 ---------------------------------------------------------------
 GPUS="${GPUS:-2 3 4 5 6 7}"
+# 解析 GPUS -> torchrun 用的 CUDA_VISIBLE_DEVICES 列表与卡数 NUM_GPUS：
+# 分隔符空格 / 逗号 / 分号都接受，元素可带 cuda: 前缀，以下四种等价：
+#   GPUS="2 3"   GPUS="2,3"   GPUS="cuda:2 cuda:3"   GPUS="2, 3"
+# set -f：解析期间关闭通配符展开（GPUS 里误写 * ? [ 时不会被 glob 成文件名）。
 CUDA_VISIBLE_DEVICES=""
 NUM_GPUS=0
-for GPU in $GPUS; do
+set -f
+for GPU in $(printf '%s\n' "${GPUS}" | tr ',;' '  '); do
     GPU_ID=${GPU#cuda:}
-    if [ -z "$CUDA_VISIBLE_DEVICES" ]; then
-        CUDA_VISIBLE_DEVICES=$GPU_ID
+    case "${GPU_ID}" in
+        ''|*[!0-9]*)
+            echo "[finetune_dental] ERROR: GPUS 中的 '${GPU}' 不是合法 GPU 序号" >&2
+            echo "  合法写法: GPUS=\"2 3\" / GPUS=\"2,3\" / GPUS=\"cuda:2 cuda:3\"" >&2
+            exit 1
+            ;;
+    esac
+    if [ -z "${CUDA_VISIBLE_DEVICES}" ]; then
+        CUDA_VISIBLE_DEVICES=${GPU_ID}
     else
-        CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES,$GPU_ID
+        CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES},${GPU_ID}
     fi
     NUM_GPUS=$((NUM_GPUS + 1))
 done
+set +f
+if [ "${NUM_GPUS}" -eq 0 ]; then
+    echo "[finetune_dental] ERROR: GPUS 为空，应形如 GPUS=\"2 3\" 或 GPUS=\"2,3\"" >&2
+    exit 1
+fi
 export CUDA_VISIBLE_DEVICES
 MASTER_PORT="${MASTER_PORT:-29501}"
 
