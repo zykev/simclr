@@ -159,9 +159,9 @@ torchrun --nproc_per_node="${NUM_GPUS}" --master_port="${MASTER_PORT}" ft_train.
     --input_size "${INPUT_SIZE}" \
     --batch_size "${BATCH_SIZE}" \
     --finetune_mode "${MODE}" \
-    --epochs 100 \
+    --epochs 50 \
     --warmup_epochs 5 \
-    --save_freq 50 \
+    --save_freq 10 \
     --eval_freq 50 \
     --data_path "${DATA_ROOT}" \
     --split_json "${SPLIT_JSON}" \
@@ -173,5 +173,5 @@ torchrun --nproc_per_node="${NUM_GPUS}" --master_port="${MASTER_PORT}" ft_train.
     ${EXTRA_ARGS}
 
 echo "[finetune_dental_no_odontify] done. 评估 test split 用:"
-echo "  python ft_eval.py --checkpoint ${OUTPUT_DIR}/checkpoint-100.pth \\
+echo "  python ft_eval.py --checkpoint ${OUTPUT_DIR}/checkpoint-050.pth \\
       --split_json ${SPLIT_JSON} --split test --output_dir ${OUTPUT_DIR}/eval"
