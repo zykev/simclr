@@ -33,6 +33,7 @@ from dental_dataset import (
     parse_tasks,
 )
 from ft_train import FineTuneModel, evaluate
+from utils.dental_records import resolve_compatible_path
 
 
 def parse_args():
@@ -60,8 +61,11 @@ def main(args):
     ckpt_args_d = ckpt_args.__dict__ if hasattr(ckpt_args, "__dict__") else {}
 
     # --- resolve config: CLI > ckpt args > defaults --------------------------
-    data_path = args.data_path or ckpt_args_d.get("data_path", ".datasets/intraoral")
-    split_json = args.split_json or ckpt_args_d.get("split_json")
+    data_path = str(resolve_compatible_path(
+        args.data_path or ckpt_args_d.get("data_path", ".datasets/intraoral")))
+    split_json = str(resolve_compatible_path(
+        args.split_json or ckpt_args_d.get("split_json"))) \
+        if (args.split_json or ckpt_args_d.get("split_json")) else None
     if split_json is None:
         raise ValueError("--split_json required (not stored in ckpt args)")
     categories = args.categories or ckpt_args_d.get("categories", "full,tooth,sextant")

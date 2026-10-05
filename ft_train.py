@@ -48,6 +48,7 @@ from dental_dataset import (
     collate_supervised,
     parse_task_weights,
 )
+from utils.dental_records import resolve_compatible_path
 
 
 # --------------------------------------------------------------------------
@@ -375,7 +376,8 @@ def train_one_epoch(model, loader, optimizer, device, epoch, args, tasks,
 def parse_args():
     parser = argparse.ArgumentParser("SimCLRv2 dental fine-tuning", add_help=False)
     # data
-    parser.add_argument("--data_path", default=".datasets/intraoral", type=str)
+    parser.add_argument("--data_path",
+                        default=str(resolve_compatible_path(".datasets/intraoral")), type=str)
     parser.add_argument("--split_json", default=None, type=str,
                         help="case-level split JSON (datasets/split.py)")
     parser.add_argument("--split", default="train", type=str,
