@@ -2,7 +2,8 @@
 
 把 [zykev/simclr](https://github.com/zykev/simclr.git)（TF1.x 原始实现）作为 git submodule 引入，
 另在 `simclrv2_resnet.py` 中 **vendored 了 Separius/SimCLRv2-Pytorch 的 PyTorch 复刻**（与
-lightly-ai HuggingFace 权重逐键对齐），在同一个病例级 split 上做监督微调，供 `compare/` 表征对比使用。
+lightly-ai HuggingFace 权重逐键对齐）。仓库同时提供监督微调和真正的牙科 continued-SSL；后者是
+SSL baseline 的正式训练入口，供 `compare/` 表征对比使用。
 
 ## 文件结构
 
@@ -13,6 +14,8 @@ baselines/simclr/
 │                             #   + load_simclrv2_backbone / build_backbone_from_ckpt_name
 ├── dental_dataset.py         # 监督微调数据集：full/tooth/sextant → fdi/tooth_class/sextant/view
 ├── ft_train.py               # 训练入口：linear/full/partial 三种微调模式，AMP、多卡 torchrun
+├── ssl_dental_dataset.py      # 无标签 two-view 牙科数据集
+├── ssl_pretrain.py            # NT-Xent continued-SSL 训练入口，AMP、多卡 torchrun
 ├── ft_eval.py                # 评估入口：加载 checkpoint 在 train/val/test split 上出指标
 ├── utils/dental_records.py   # vendored 病例级 split/标注读取（与 Swin-MAE 版本一致，自包含）
 ├── scripts/download_weights.sh
@@ -39,6 +42,9 @@ baselines/simclr/
 `resnet.fc`（1000 类监督头）不参与微调；`head`（128 维对比头）同样不用。
 
 ## 微调训练
+
+下面的 `finetune_dental*.sh` 是有 FDI / sextant / view 标签的监督微调，仅保留作下游
+supervised adaptation 使用；它不是 SSL baseline。
 
 ```bash
 source /home/zychen/miniconda3/etc/profile.d/conda.sh && conda activate intraoral
@@ -108,6 +114,26 @@ cd /home/zychen/Documents/intraoral_code/dentmag
 
 默认训练输出目录 `exp/simclrv2_r{50,101}_full_448` 与 models.yaml 注册路径一致，因此训练后
 直接 `--model simclrv2_r50_adapted`（不带 `=`）也能被 `eval_baseline.sh` 识别。
+
+## 牙科 continued self-supervised pretraining（SSL baseline）
+
+`scripts/simclr_ssl_dental_no_odontify.sh` 才是 no-odontify 条件下的 SimCLR baseline：它从
+ImageNet SimCLRv2 checkpoint 初始化 backbone 和 projection head，对每个原始 full-mouth image
+生成两份独立的 SimCLR augmentations，并只优化 symmetric NT-Xent。默认只使用 `full` record，避免
+tooth/sextant bbox 成为隐式的空间监督；训练循环不会读取 FDI、sextant 或 view 标签。
+
+```bash
+# 默认 r50 @448；可传 r101；GPUS 语法与旧脚本一致
+GPUS="2,3,4,5" ./scripts/simclr_ssl_dental_no_odontify.sh --model r50
+
+# 指定输出、分辨率或训练时长
+INPUT_SIZE=224 OUTPUT_DIR=exp/simclrv2_r50_ssl_224_no_odontify \
+  ./scripts/simclr_ssl_dental_no_odontify.sh --model r50 --epochs 200
+```
+
+默认输出为 `exp/simclrv2_r{50,101}_ssl_448_no_odontify/`，checkpoint 内的 `model` 同时包含
+`backbone.*` 与 `projector.*`；现有 `compare/adapters/simclr.py` 会自动忽略 projector、读取
+backbone，并从 `args.input_size/depth/width/sk_ratio` 恢复结构。
 
 ## 实现要点 / 坑
 
