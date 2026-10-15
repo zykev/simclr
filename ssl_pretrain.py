@@ -82,8 +82,12 @@ def nt_xent(z1, z2, temperature):
     diagonal = torch.arange(local_batch, device=z1.device)
 
     def direction(anchor, positives, same_view):
+        # Clone before the diagonal mask: an in-place write here would bump the
+        # version counter of a tensor autograd still needs, which DDP surfaces
+        # as "modified by an inplace operation" on the projection head's
+        # BatchNorm backward.
         logits_pos = anchor @ positives.T / temperature
-        logits_same = anchor @ same_view.T / temperature
+        logits_same = (anchor @ same_view.T / temperature).clone()
         logits_same[diagonal, targets] = torch.finfo(logits_same.dtype).min
         return F.cross_entropy(torch.cat([logits_pos, logits_same], dim=1), targets)
 
@@ -182,7 +186,11 @@ def main(args):
             print(f"[projector init] missing={len(missing)} unexpected={len(unexpected)}", flush=True)
     model = SimCLRModel(backbone, projector).to(device)
     if args.distributed:
-        model = DDP(model, device_ids=[args.gpu], output_device=args.gpu)
+        # Each iteration issues exactly one forward (both views are stacked), so
+        # DDP's default per-forward buffer broadcast cannot race the BatchNorm
+        # running statistics with the autograd graph.
+        model = DDP(model, device_ids=[args.gpu], output_device=args.gpu,
+                    broadcast_buffers=False)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler("cuda", enabled=args.amp)
     total_steps = args.epochs * len(loader)
@@ -202,7 +210,13 @@ def main(args):
                            args.warmup_epochs * len(loader))
             optimizer.zero_grad(set_to_none=True)
             with torch.autocast(device_type="cuda", enabled=args.amp):
-                loss = nt_xent(model(view1), model(view2), args.temperature)
+                # Single forward for both views.  Calling the DDP-wrapped model
+                # twice per iteration would broadcast the BatchNorm buffers in
+                # place twice, invalidating the autograd graph of the first
+                # view and aborting backward with an in-place version error.
+                embeddings = model(torch.cat([view1, view2], dim=0))
+                z1, z2 = embeddings.chunk(2, dim=0)
+                loss = nt_xent(z1, z2, args.temperature)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
