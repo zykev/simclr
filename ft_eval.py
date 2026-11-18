@@ -41,7 +41,8 @@ def parse_args():
     parser.add_argument("--checkpoint", required=True, type=str,
                         help="trained checkpoint-<epoch>.pth")
     parser.add_argument("--data_path", default=None, type=str)
-    parser.add_argument("--split_json", default=None, type=str)
+    parser.add_argument("--split_json", default=str(Path(__file__).resolve().parents[2] /
+                        '.datasets/intraoral/train_test_seed0_test0p2_no_odontify.json'), type=str)
     parser.add_argument("--split", default="test", type=str,
                         choices=("train", "test"))
     parser.add_argument("--categories", default=None, type=str)

@@ -378,7 +378,8 @@ def parse_args():
     # data
     parser.add_argument("--data_path",
                         default=str(resolve_compatible_path(".datasets/intraoral")), type=str)
-    parser.add_argument("--split_json", default=None, type=str,
+    parser.add_argument("--split_json", default=str(Path(__file__).resolve().parents[2] /
+                        '.datasets/intraoral/train_test_seed0_test0p2_no_odontify.json'), type=str,
                         help="case-level split JSON (datasets/split.py)")
     parser.add_argument("--split", default="train", type=str,
                         choices=("train", "test"))

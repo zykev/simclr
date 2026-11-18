@@ -14,7 +14,7 @@ set -e
 #               GPUS="2,3" 与 GPUS="cuda:2 cuda:3" 都等价于 GPUS="2 3"
 #   INPUT_SIZE  默认 448（与 compare/ models.yaml 的 simclrv2_*_adapted 对齐）
 #   DATA_ROOT   默认 ${WORKSPACE_ROOT}/.datasets/intraoral
-#   SPLIT_JSON  默认 ${DATA_ROOT}/train_test_seed0_test0p2.json
+#   SPLIT_JSON  默认 ${DATA_ROOT}/train_test_seed0_test0p2_no_odontify.json
 #   OUTPUT_DIR  默认 ${SIMCLR_ROOT}/exp/simclrv2_<model>_<mode>_<input_size>
 #   CKPT_DIR    默认 /disk1/work/zychen/Checkpoints/intraoral（预训练权重目录）
 #   BATCH_SIZE  默认按模型/分辨率（r50: 224->128, 448->32; r101: 224->96, 448->24）
@@ -86,7 +86,7 @@ MASTER_PORT="${MASTER_PORT:-29501}"
 # 数据根目录兼容：优先 .datasets/intraoral，找不到（挂载点缺失 / 符号链接失效）时
 # 回退到 .datasets/intraoral1。显式设置 DATA_ROOT / SPLIT_JSON 时以环境变量为准，不回退。
 resolve_dental_path() {
-    # $1 = 相对 .datasets 层名的后缀（"" 或 "/train_test_seed0_test0p2.json"）
+    # $1 = 相对 .datasets 层名的后缀（"" 或 "/train_test_seed0_test0p2_no_odontify.json"）
     for ROOT_NAME in intraoral intraoral1; do
         if [ -e "${WORKSPACE_ROOT}/.datasets/${ROOT_NAME}$1" ]; then
             printf '%s\n' "${WORKSPACE_ROOT}/.datasets/${ROOT_NAME}$1"
@@ -97,7 +97,7 @@ resolve_dental_path() {
 }
 
 DATA_ROOT="${DATA_ROOT:-$(resolve_dental_path "")}"
-SPLIT_JSON="${SPLIT_JSON:-$(resolve_dental_path "/train_test_seed0_test0p2.json")}"
+SPLIT_JSON="${SPLIT_JSON:-$(resolve_dental_path "/train_test_seed0_test0p2_no_odontify.json")}"
 CKPT_DIR="${CKPT_DIR:-/disk1/work/zychen/Checkpoints/intraoral}"
 if [ "${MODEL}" = "r50" ]; then
     INIT_CKPT="${INIT_CKPT:-${CKPT_DIR}/simclrv2_r50_1x_sk1.pth}"
@@ -114,7 +114,7 @@ else
         BATCH_SIZE="${BATCH_SIZE:-96}"
     fi
 fi
-OUTPUT_DIR="${OUTPUT_DIR:-${SIMCLR_ROOT}/exp/simclrv2_${MODEL}_${MODE}_${INPUT_SIZE}}"
+OUTPUT_DIR="${OUTPUT_DIR:-${SIMCLR_ROOT}/exp/simclrv2_${MODEL}_${MODE}_${INPUT_SIZE}_no_odontify}"
 
 # 保证在预训练权重上微调：权重必须存在
 if [ ! -f "${INIT_CKPT}" ]; then
